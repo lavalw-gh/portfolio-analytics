@@ -31,7 +31,7 @@ except Exception:
 # APP CONFIG
 # ============================================================================
 
-st.set_page_config(page_title="Portfolio Analyzer 2.14", layout="wide")
+st.set_page_config(page_title="Portfolio Analyzer 2.15", layout="wide")
 
 # ============================================================================
 # CSV NORMALIZATION & REBASING (v2.9) + YAHOO NAMES (v2.11)
