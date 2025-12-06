@@ -1299,25 +1299,231 @@ def main():
     if not portfolio_data:
         st.error("Could not process any portfolios.")
         return
-
+   
     # =========================================================================
     # PDF REPORT (SIDEBAR)
     # =========================================================================
-
     st.sidebar.subheader("📄 PDF Report")
-
     if not REPORTLAB_AVAILABLE:
         st.sidebar.warning(
             "PDF export is disabled because 'reportlab' is not installed. "
             "Install it in your environment to enable PDF reports."
         )
     else:
+        # Add "All" option to the dropdown
+        report_options = ["All"] + selected_portfolios
         report_portfolio = st.sidebar.selectbox(
             "Portfolio for report:",
-            selected_portfolios,
+            report_options,
             key="report_portfolio_selector",
         )
-        if report_portfolio and report_portfolio in portfolio_data:
+    
+        if report_portfolio == "All":
+            # Generate combined PDF for all portfolios
+            try:
+                from reportlab.platypus import PageBreak
+                from reportlab.lib.pagesizes import landscape
+                from reportlab.lib.units import inch
+                from io import BytesIO
+    
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(
+                    buffer,
+                    pagesize=landscape(A4),
+                    topMargin=36,
+                    bottomMargin=36,
+                    leftMargin=36,
+                    rightMargin=36,
+                )
+                all_elements = []
+    
+                for idx, pname in enumerate(selected_portfolios):
+                    if pname in portfolio_data:
+                        # Generate content for this portfolio
+                        styles = getSampleStyleSheet()
+    
+                        # Title for this portfolio
+                        all_elements.append(
+                            Paragraph(
+                                f"Portfolio Report: {pname}", styles["Heading1"])
+                        )
+                        all_elements.append(Spacer(1, 12))
+    
+                        # Get portfolio data
+                        pdata = portfolio_data[pname]
+    
+                        # 1) Cumulative Return Chart
+                        base_cum = pdata["twr_cum"]
+                        common_idx = base_cum.index.intersection(
+                            bench_cum.index)
+                        if not common_idx.empty:
+                            base_series = base_cum.loc[common_idx]
+                            bench_series = bench_cum.loc[common_idx]
+                            base_series = base_series - base_series.iloc[0]
+                            bench_series = bench_series - bench_series.iloc[0]
+                            base_pct = base_series * 100.0
+                            bench_pct = bench_series * 100.0
+    
+                            fig, ax = plt.subplots(figsize=(7.5, 4))
+                            ax.plot(common_idx, base_pct, label=pname)
+                            ax.plot(common_idx, bench_pct,
+                                    label=f"Benchmark ({benchmark})")
+                            ax.set_ylabel("Cumulative Return (%)")
+                            ax.legend()
+                            ax.grid(True, alpha=0.3)
+                            fig.autofmt_xdate()
+    
+                            img_buf = BytesIO()
+                            fig.savefig(img_buf, format="png",
+                                        dpi=150, bbox_inches="tight")
+                            plt.close(fig)
+                            img_buf.seek(0)
+    
+                            max_width = doc.width * 0.9
+                            max_height = 3.5 * inch
+                            img = Image(img_buf, width=max_width,
+                                        height=max_height)
+                            all_elements.append(img)
+                            all_elements.append(Spacer(1, 12))
+    
+                        # 2) Key Metrics Table
+                        all_elements.append(
+                            Paragraph("Key Metrics", styles["Heading2"]))
+                        m = pdata["metrics"]
+                        metrics_rows = [
+                            {
+                                "Series": pname,
+                                "Total Return": m["total_return"],
+                                "Volatility (annual)": m["vol_annual"],
+                                "Sharpe": m["sharpe"],
+                                "Sortino": m["sortino"],
+                                "Downside Dev": m["downside_dev"],
+                                "Max Drawdown": m["max_drawdown"],
+                            },
+                            {
+                                "Series": f"Benchmark ({benchmark})",
+                                "Total Return": bench_metrics["total_return"],
+                                "Volatility (annual)": bench_metrics["vol_annual"],
+                                "Sharpe": bench_metrics["sharpe"],
+                                "Sortino": bench_metrics["sortino"],
+                                "Downside Dev": bench_metrics["downside_dev"],
+                                "Max Drawdown": bench_metrics["max_drawdown"],
+                            },
+                        ]
+    
+                        metrics_df = pd.DataFrame(metrics_rows)
+                        fmt_df = metrics_df.copy()
+                        fmt_df["Total Return"] = fmt_df["Total Return"].map(
+                            lambda x: f"{x:.2%}" if pd.notna(x) else ""
+                        )
+                        fmt_df["Volatility (annual)"] = fmt_df["Volatility (annual)"].map(
+                            lambda x: f"{x:.2%}" if pd.notna(x) else ""
+                        )
+                        fmt_df["Sharpe"] = fmt_df["Sharpe"].map(
+                            lambda x: f"{x:.2f}" if pd.notna(x) else ""
+                        )
+                        fmt_df["Sortino"] = fmt_df["Sortino"].map(
+                            lambda x: f"{x:.2f}" if pd.notna(x) else ""
+                        )
+                        fmt_df["Downside Dev"] = fmt_df["Downside Dev"].map(
+                            lambda x: f"{x:.2%}" if pd.notna(x) else ""
+                        )
+                        fmt_df["Max Drawdown"] = fmt_df["Max Drawdown"].map(
+                            lambda x: f"{x:.2%}" if pd.notna(x) else ""
+                        )
+    
+                        metrics_table_data = [
+                            fmt_df.columns.tolist()] + fmt_df.values.tolist()
+                        metrics_table = Table(
+                            metrics_table_data, hAlign="LEFT")
+                        metrics_table.setStyle(
+                            TableStyle([
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                                ("ALIGN", (1, 1), (-1, -1), "RIGHT"),
+                            ])
+                        )
+                        all_elements.append(metrics_table)
+                        all_elements.append(Spacer(1, 12))
+    
+                        # 3) Holdings Overview
+                        all_elements.append(
+                            Paragraph("Holdings Overview", styles["Heading2"]))
+                        hold_table, total_val, port_ytd, bench_ytd = build_holdings_overview_full(
+                            pdata, benchmark, bench_prices, yahoo_names_all
+                        )
+    
+                        ht = hold_table.copy()
+                        ht["Shares"] = ht["Shares"].map(format_shares)
+                        ht["Cost (£)"] = ht["Cost (£)"].map(
+                            lambda x: f"£{x:,.2f}" if pd.notna(x) else ""
+                        )
+                        ht["Value (£)"] = ht["Value (£)"].map(
+                            lambda x: f"£{x:,.2f}" if pd.notna(x) else ""
+                        )
+                        ht["Weight"] = ht["Weight"].map(
+                            lambda x: f"{x:.2%}" if pd.notna(x) else ""
+                        )
+                        ht["YTD Return"] = ht["YTD Return"].map(
+                            lambda x: f"{x:.2%}" if pd.notna(x) else ""
+                        )
+                        ht["Vs Portfolio YTD"] = ht["Vs Portfolio YTD"].map(
+                            lambda x: f"{x:+.2%}" if pd.notna(x) else ""
+                        )
+                        ht["Vs Benchmark YTD"] = ht["Vs Benchmark YTD"].map(
+                            lambda x: f"{x:+.2%}" if pd.notna(x) else ""
+                        )
+    
+                        hold_data = [ht.columns.tolist()] + ht.values.tolist()
+                        hold_table_pdf = Table(
+                            hold_data, hAlign="LEFT", repeatRows=1)
+                        hold_table_pdf.setStyle(
+                            TableStyle([
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                                ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
+                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                ("FONTSIZE", (0, 0), (-1, -1), 7),
+                                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                                ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+                            ])
+                        )
+                        all_elements.append(hold_table_pdf)
+                        all_elements.append(Spacer(1, 6))
+                        all_elements.append(
+                            Paragraph(
+                                f"Total Portfolio Value: £{total_val:,.2f}", styles["Normal"])
+                        )
+                        all_elements.append(
+                            Paragraph(
+                                f"Portfolio YTD: {port_ytd:.2%} | {benchmark} YTD: {bench_ytd:.2%}",
+                                styles["Normal"],
+                            )
+                        )
+    
+                        # Add page break between portfolios (except after the last one)
+                        if idx < len(selected_portfolios) - 1:
+                            all_elements.append(PageBreak())
+    
+                # Build the combined PDF
+                doc.build(all_elements)
+                buffer.seek(0)
+                pdf_bytes = buffer.getvalue()
+    
+                st.sidebar.download_button(
+                    "⬇️ Download PDF report (All Portfolios)",
+                    data=pdf_bytes,
+                    file_name=f"All_Portfolios_report_v2.14.pdf",
+                    mime="application/pdf",
+                    key="download_pdf_report",
+                )
+            except Exception as e:
+                st.sidebar.error(f"Error generating combined PDF report: {e}")
+    
+        elif report_portfolio and report_portfolio in portfolio_data:
+            # Generate single portfolio PDF (existing code)
             try:
                 pdf_bytes = generate_pdf_report(
                     report_portfolio,
