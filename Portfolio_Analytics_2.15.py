@@ -1049,7 +1049,7 @@ def run_monte_carlo_mean_reverting(
 
 
 def main():
-    st.title("📊 Portfolio Analyzer 2.14 - based on Yahoo Data")
+    st.title("📊 Portfolio Analyzer 2.15 - based on Yahoo Data")
     st.warning(
         "⚠️ **IMPORTANT**: Please ensure all prices in your CSV are in **major currency units** "
         "(£ or $), **NOT** in pence/cents (p or ¢).\n\n"
@@ -1515,7 +1515,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report (All Portfolios)",
                     data=pdf_bytes,
-                    file_name=f"All_Portfolios_report_v2.14.pdf",
+                    file_name=f"All_Portfolios_report_v2.15.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1537,7 +1537,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report",
                     data=pdf_bytes,
-                    file_name=f"{report_portfolio}_report_v2.14.pdf",
+                    file_name=f"{report_portfolio}_report_v2.15.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
