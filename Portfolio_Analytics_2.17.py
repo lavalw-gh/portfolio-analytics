@@ -1633,7 +1633,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report (All Portfolios)",
                     data=pdf_bytes,
-                    file_name=f"All_Portfolios_report_v2.14.pdf",
+                    file_name=f"All_Portfolios_report_v2.17.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1655,7 +1655,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report",
                     data=pdf_bytes,
-                    file_name=f"{report_portfolio}_report_v2.14.pdf",
+                    file_name=f"{report_portfolio}_report_v2.17.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1736,7 +1736,7 @@ def main():
         st.sidebar.download_button(
             "⬇️ Download CSV Export",
             data=full_csv,
-            file_name="export_tables.csv",
+            file_name="export_tables_2.17.csv",
             mime="text/csv",
             key="download_csv_export",
         )
