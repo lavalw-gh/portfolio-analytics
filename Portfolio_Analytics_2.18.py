@@ -1360,7 +1360,7 @@ def main():
     bench_metrics = compute_risk_metrics(bench_ret, bench_rf_daily_used)
 
     for pname in selected_portfolios:
-        tx_all = portfolios[pname][portfolios[pname]
+        tx_all = portfolios[pname][portfolios[pname]["date"].dt.date <= end_effective].copy()
         holdings_all = build_holdings(tx_all, asset_prices)
         twr_daily_all, twr_cum_all = compute_twr_from_prices(
             asset_prices, holdings_all
