@@ -31,7 +31,7 @@ except Exception:
 # APP CONFIG
 # ============================================================================
 
-st.set_page_config(page_title="Portfolio Analyzer 2.18", layout="wide")
+st.set_page_config(page_title="Portfolio Analyzer 2.19", layout="wide")
 
 # ============================================================================
 # CSV NORMALIZATION & REBASING (v2.9) + YAHOO NAMES (v2.11)
@@ -412,7 +412,7 @@ def get_price_history(
                         }
                     )
 
-                    # v2.18: Backfill missing leading period using the first available price
+                    # v2.19: Backfill missing leading period using the first available price
                     # This avoids a stepped jump in TWR when the first valid Yahoo price appears.
                     try:
                         fill_value = close.at[first_valid, s]
@@ -1143,7 +1143,7 @@ def run_monte_carlo_mean_reverting(
 
 
 def main():
-    st.title("📊 Portfolio Analyzer 2.18 - based on Yahoo Data")
+    st.title("📊 Portfolio Analyzer 2.19 - based on Yahoo Data")
     st.warning(
         "⚠️ **IMPORTANT**: Please ensure all prices in your CSV are in **major currency units** "
         "(£ or $), **NOT** in pence/cents (p or ¢).\n\n"
@@ -1662,7 +1662,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report (All Portfolios)",
                     data=pdf_bytes,
-                    file_name=f"All_Portfolios_report_v2.18.pdf",
+                    file_name=f"All_Portfolios_report_v2.19.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1684,7 +1684,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report",
                     data=pdf_bytes,
-                    file_name=f"{report_portfolio}_report_v2.18.pdf",
+                    file_name=f"{report_portfolio}_report_v2.19.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1765,7 +1765,7 @@ def main():
         st.sidebar.download_button(
             "⬇️ Download CSV Export",
             data=full_csv,
-            file_name="export_tables_2.18.csv",
+            file_name="export_tables_2.19.csv",
             mime="text/csv",
             key="download_csv_export",
         )
