@@ -1211,7 +1211,7 @@ def main():
         "Upload portfolio CSV files",
         type="csv",
         accept_multiple_files=True,
-        help="Upload CSV files with columns: date, ticker, shares, price, total_cost",
+        help="Upload CSV files with columns: date, ticker, shares, price, total_cost. For Cash use CASH$ ticker.",
     )
 
     if not uploaded_files:
