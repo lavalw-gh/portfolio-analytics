@@ -67,10 +67,6 @@ def normalize_and_rebase_to_pounds(
     for ticker in tickers:
         # v2.20: Treat CASH$ as base-currency cash (GBP) with constant £1 valuation; no Yahoo fetch.
         if ticker == "CASH$":
-            conversion_factors[ticker] = 1.0
-            yahoo_names[ticker] = "Cash"
-            conversion_log.append(
-                "✅ CASH$: Treated as cash (GBP) with constant £1.00 valuation (no Yahoo fetch)")
             continue
         try:
             # Get Yahoo Finance metadata
