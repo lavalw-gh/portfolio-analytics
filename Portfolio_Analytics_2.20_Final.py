@@ -375,13 +375,6 @@ def get_price_history(
 
     # Rebase all prices to pounds
     for ticker in tickers:
-        # v2.20: Treat CASH$ as base-currency cash (GBP) with constant £1 valuation; no Yahoo fetch.
-        if ticker == "CASH$":
-            conversion_factors[ticker] = 1.0
-            yahoo_names[ticker] = "Cash"
-            conversion_log.append(
-                "✅ CASH$: Treated as cash (GBP) with constant £1.00 valuation (no Yahoo fetch)")
-            continue
         if ticker in close.columns and ticker in conversion_factors:
             factor = conversion_factors[ticker]
             if factor > 1:
