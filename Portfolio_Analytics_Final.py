@@ -2,6 +2,7 @@
 # Downloads historical prices from Yahoo Finance to value holdings and compute performance metrics.
 # Supports multiple portfolios vs a benchmark, allocations/holdings views, scenarios and Monte Carlo.
 # Exports tables/charts (ZIP) and optional PDF reports.
+# This is Version 2.21
 
 from __future__ import annotations
 import streamlit as st
@@ -834,7 +835,7 @@ def build_holdings_overview_full(
 
 
 def add_holdings_totals_row(hold_table: pd.DataFrame) -> pd.DataFrame:
-    """Append a totals row summing Shares, Cost (£), and Value (£) (v2.20)."""
+    """Append a totals row summing Shares, Cost (£), and Value (£) (v2.21)."""
     if hold_table is None or hold_table.empty:
         return hold_table
 
@@ -1783,7 +1784,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report (All Portfolios)",
                     data=pdf_bytes,
-                    file_name=f"All_Portfolios_report_v2.20.pdf",
+                    file_name=f"All_Portfolios_report_v2.21.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1805,7 +1806,7 @@ def main():
                 st.sidebar.download_button(
                     "⬇️ Download PDF report",
                     data=pdf_bytes,
-                    file_name=f"{report_portfolio}_report_v2.20.pdf",
+                    file_name=f"{report_portfolio}_report_v2.21.pdf",
                     mime="application/pdf",
                     key="download_pdf_report",
                 )
@@ -1889,7 +1890,7 @@ def main():
         st.sidebar.download_button(
             "⬇️ Download CSV Export",
             data=full_csv,
-            file_name="export_tables_2.20.csv",
+            file_name="export_tables_2.21.csv",
             mime="text/csv",
             key="download_csv_export",
         )
