@@ -2,7 +2,7 @@
 # Downloads historical prices from Yahoo Finance to value holdings and compute performance metrics.
 # Supports multiple portfolios vs a benchmark, allocations/holdings views, scenarios and Monte Carlo.
 # Exports tables/charts (ZIP) and optional PDF reports.
-# This is Version 2.21
+# This is Version 2.22
 
 from __future__ import annotations
 import streamlit as st
@@ -34,10 +34,193 @@ except Exception:
     REPORTLAB_AVAILABLE = False
 
 # ============================================================================
+
+
+# ============================================================================
+# YAHOO DATA FIXES (v2.22)
+# - Fix intermittent GBp/GBP unit-mix extremes after pence->pounds normalisation
+# - Normalise single-day price spikes (reversal-based)
+# ============================================================================
+
+from typing import List, Tuple
+
+
+@lru_cache(maxsize=512)
+def get_yahoo_currency_cached(ticker: str) -> str:
+    """Best-effort cached currency lookup via Yahoo Finance metadata."""
+    try:
+        tobj = yf.Ticker(ticker)
+    except Exception:
+        return ""
+
+    # Fast path
+    try:
+        fi = getattr(tobj, "fast_info", None)
+        if fi is not None:
+            ccy = (getattr(fi, "currency", "") or "").strip()
+            if ccy:
+                return ccy
+    except Exception:
+        pass
+
+    # Slow path
+    try:
+        info = getattr(tobj, "info", None)
+        if isinstance(info, dict):
+            ccy = (info.get("currency", "") or "").strip()
+            if ccy:
+                return ccy
+    except Exception:
+        pass
+
+    return ""
+
+
+def fix_gbp_unit_mix_extremes(
+    prices_gbp: pd.DataFrame,
+    tickers: List[str],
+    factor: float = 100.0,
+    ratio_min: float = 50.0,
+    ratio_max: float = 150.0,
+    tol: float = 0.25,
+    rolling_window: int = 90,
+) -> Tuple[pd.DataFrame, List[dict]]:
+    """Fix ~100x-too-low price prints caused by intermittent GBp/GBP unit-mix."""
+    fixed = prices_gbp.copy()
+    report: List[dict] = []
+
+    for t in tickers:
+        if t not in fixed.columns:
+            continue
+
+        ccy = get_yahoo_currency_cached(t)
+        if ccy not in ("GBp", "GBX"):
+            continue
+
+        s = fixed[t].astype(float)
+        v = s[(s.notna()) & (s > 0)]
+        if len(v) < 10:
+            continue
+
+        roll_med = s.rolling(
+            window=int(rolling_window),
+            min_periods=max(5, int(rolling_window // 2)),
+        ).median()
+        global_med = float(v.median())
+
+        prev = s.shift(1)
+        nxt = s.shift(-1)
+
+        for dt, cur in s.items():
+            if not (pd.notna(cur) and cur > 0):
+                continue
+
+            typ = roll_med.loc[dt]
+            if not (pd.notna(typ) and typ > 0):
+                typ = global_med
+
+            if typ and typ > 0:
+                ratio = float(typ / cur)
+                if ratio_min <= ratio <= ratio_max and abs(((cur * factor) / typ) - 1.0) <= tol:
+                    old_px, new_px = float(cur), float(cur * factor)
+                    fixed.at[dt, t] = new_px
+                    report.append({
+                        "Ticker": t,
+                        "Date": pd.Timestamp(dt).strftime("%Y-%m-%d"),
+                        "Currency": ccy,
+                        "Issue": "GBp/GBP unit-mix extreme (corrected)",
+                        "Old Price": old_px,
+                        "New Price": new_px,
+                        "Factor": factor,
+                        "Method": "RollingMedian",
+                    })
+                    continue
+
+            if pd.notna(global_med) and global_med > 0:
+                ratio_g = float(global_med / cur)
+                if ratio_min <= ratio_g <= ratio_max and abs(((cur * factor) / global_med) - 1.0) <= tol:
+                    old_px, new_px = float(cur), float(cur * factor)
+                    fixed.at[dt, t] = new_px
+                    report.append({
+                        "Ticker": t,
+                        "Date": pd.Timestamp(dt).strftime("%Y-%m-%d"),
+                        "Currency": ccy,
+                        "Issue": "GBp/GBP unit-mix extreme (corrected)",
+                        "Old Price": old_px,
+                        "New Price": new_px,
+                        "Factor": factor,
+                        "Method": "GlobalMedian",
+                    })
+                    continue
+
+            p = prev.loc[dt]
+            n = nxt.loc[dt]
+            if pd.notna(p) and pd.notna(n) and (p > 0) and (n > 0):
+                r1, r2 = float(p / cur), float(n / cur)
+                if (ratio_min <= r1 <= ratio_max) and (ratio_min <= r2 <= ratio_max):
+                    if (abs(((cur * factor) / p) - 1.0) <= tol) and (abs(((cur * factor) / n) - 1.0) <= tol):
+                        old_px, new_px = float(cur), float(cur * factor)
+                        fixed.at[dt, t] = new_px
+                        report.append({
+                            "Ticker": t,
+                            "Date": pd.Timestamp(dt).strftime("%Y-%m-%d"),
+                            "Currency": ccy,
+                            "Issue": "GBp/GBP unit-mix extreme (corrected)",
+                            "Old Price": old_px,
+                            "New Price": new_px,
+                            "Factor": factor,
+                            "Method": "Neighbors",
+                        })
+
+    return fixed, report
+
+
+def validate_and_clean_prices(
+    prices: pd.DataFrame,
+    threshold: float = 0.20,
+) -> Tuple[pd.DataFrame, List[dict]]:
+    """Detect & replace single-day spikes that reverse the following day."""
+    cleaned = prices.copy()
+    corrections: List[dict] = []
+
+    if cleaned.empty:
+        return cleaned, corrections
+
+    for sym in cleaned.columns:
+        s = cleaned[sym].copy()
+        if s.isna().all():
+            continue
+
+        pct = s.pct_change()
+        pct_next = s.pct_change(-1)
+        spikes = (pct.abs() > threshold) & (pct_next.abs() > threshold)
+
+        for dt in s[spikes].index:
+            idx = s.index.get_loc(dt)
+            if idx <= 0 or idx >= len(s) - 1:
+                continue
+
+            prev_px = s.iloc[idx - 1]
+            spike_px = s.iloc[idx]
+            if pd.isna(prev_px) or pd.isna(spike_px) or prev_px == 0:
+                continue
+
+            cleaned.loc[dt, sym] = prev_px
+
+            corrections.append({
+                "symbol": sym,
+                "date": dt,
+                "pct_move": (float(spike_px) / float(prev_px)) - 1.0,
+                "old_price": float(spike_px),
+                "new_price": float(prev_px),
+            })
+
+    return cleaned, corrections
+
 # APP CONFIG
 # ============================================================================
 
-st.set_page_config(page_title="Portfolio Analyzer 2.21", layout="wide")
+st.set_page_config(page_title="Portfolio Analyzer 2.22", layout="wide")
 
 # ============================================================================
 # CSV NORMALIZATION & REBASING (v2.9) + YAHOO NAMES (v2.11)
@@ -502,29 +685,39 @@ def get_price_history(
                     except Exception:
                         pass
 
-        # v2.21: Apply spike cleaning (normalize prices)
-    enable_spike_clean = True  # Enable by default
-    spike_threshold_pct = 25.0  # 25% threshold
-    spike_corrections: list[dict] = []
+        # v2.22: Fix Yahoo GBp/GBP unit-mix extremes (after rebasing to £)
+        enable_unit_mix_fix = True
+        unit_mix_report: list[dict] = []
+        if enable_unit_mix_fix:
+            # Only attempt on tickers that were rebased from GBp/GBX (factor>=100)
+            unit_mix_tickers = [t for t in all_symbols if (t in close.columns and float(conversion_factors.get(t, 1.0)) >= 100.0)]
+            if unit_mix_tickers:
+                close, unit_mix_report = fix_gbp_unit_mix_extremes(close, unit_mix_tickers)
+                if unit_mix_report:
+                    st.info(f"🔧 Yahoo GBp/GBP fix: {len(unit_mix_report)} extreme print(s) corrected")
 
-    if enable_spike_clean:
-        close, spike_corrections = clean_daily_spikes_flat(
-            close,
-            threshold=float(spike_threshold_pct) / 100.0,
-        )
-        if spike_corrections:
-            st.info(
-                f"🔧 Yahoo price normalization: {len(spike_corrections)} spike(s) detected and normalized "
-                f"(threshold: {spike_threshold_pct}%)"
-            )
+        # v2.22: Apply spike normalisation (reversal-based; conservative)
+        enable_spike_clean = True
+        spike_threshold_pct = 25.0
+        spike_corrections: list[dict] = []
+        if enable_spike_clean:
+            close, spike_corrections = validate_and_clean_prices(close, threshold=float(spike_threshold_pct) / 100.0)
+            if spike_corrections:
+                st.info(
+                    f"🔧 Yahoo price normalization: {len(spike_corrections)} spike(s) detected and normalized "
+                    f"(threshold: {spike_threshold_pct}%)"
+                )
 
-    # Forward-fill to remove internal gaps for calculations
+        # Forward-fill to remove internal gaps for calculations
     close[all_symbols] = close[all_symbols].ffill()
 
     # Attach metadata for later display in the app
     close._yahoo_issues = issues  # attach
     close._missing_ranges = missing_ranges
 
+    # v2.22: Attach correction reports
+    close._spike_corrections = spike_corrections
+    close._gbp_unit_mix_report = unit_mix_report
     return close
 
 # ============================================================================
@@ -1264,7 +1457,7 @@ def run_monte_carlo_mean_reverting(
 
 
 def main():
-    st.title("📊 Portfolio Analyzer 2.21 - based on Yahoo Data")
+    st.title("📊 Portfolio Analyzer 2.22 - based on Yahoo Data")
     st.warning(
         "⚠️ **IMPORTANT**: Please ensure all prices in your CSV are in **major currency units** "
         "(£ or $), **NOT** in pence/cents (p or ¢).\n\n"
