@@ -2,7 +2,7 @@
 # Downloads historical prices from Yahoo Finance to value holdings and compute performance metrics.
 # Supports multiple portfolios vs a benchmark, allocations/holdings views, scenarios and Monte Carlo.
 # Exports tables/charts (ZIP) and optional PDF reports.
-# This is Version 2.22
+# This is Version 2.23
 
 from __future__ import annotations
 import streamlit as st
@@ -40,6 +40,8 @@ except Exception:
 # YAHOO DATA FIXES (v2.22)
 # - Fix intermittent GBp/GBP unit-mix extremes after pence->pounds normalisation
 # - Normalise single-day price spikes (reversal-based)
+# YAHOO DATA FIXES (v2.23)
+# -Assign CASH or unknown symbol with £1
 # ============================================================================
 
 from typing import List, Tuple
@@ -220,7 +222,7 @@ def validate_and_clean_prices(
 # APP CONFIG
 # ============================================================================
 
-st.set_page_config(page_title="Portfolio Analyzer 2.22", layout="wide")
+st.set_page_config(page_title="Portfolio Analyzer 2.23", layout="wide")
 
 # ============================================================================
 # CSV NORMALIZATION & REBASING (v2.9) + YAHOO NAMES (v2.11)
@@ -610,13 +612,12 @@ def get_price_history(
 
     for s in all_symbols:
         if s not in close.columns:
-            close[s] = np.nan
-            issues.append(
-                {
-                    "symbol": s,
-                    "problem": "Column added as all-NaN because Yahoo omitted symbol",
-                }
-            )
+            # Ticker {s} is not a valid Yahoo ticker, a value of £1 has been assigned for the entire period.
+            close[s] = 1.0
+            issues.append({
+                "symbol": s,
+                "problem": f"Ticker {s} is not a valid Yahoo ticker, a value of £1 has been assigned for the entire period.",
+            })
 
     close = close[all_symbols]
 
@@ -658,6 +659,8 @@ def get_price_history(
                         "end": last_index.strftime("%d/%m/%Y"),
                     }
                 )
+                # Ticker {s} is not a valid Yahoo ticker, a value of £1 has been assigned for the entire period.
+                close[s] = 1.0
             else:
                 # Case 2: there is data, but the start of the period is NaN
                 first_valid = series.first_valid_index()
@@ -1457,7 +1460,7 @@ def run_monte_carlo_mean_reverting(
 
 
 def main():
-    st.title("📊 Portfolio Analyzer 2.22 - based on Yahoo Data")
+    st.title("📊 Portfolio Analyzer 2.23 - based on Yahoo Data")
     st.warning(
         "⚠️ **IMPORTANT**: Please ensure all prices in your CSV are in **major currency units** "
         "(£ or $), **NOT** in pence/cents (p or ¢).\n\n"
