@@ -252,7 +252,7 @@ def normalize_and_rebase_to_pounds(
 
     for ticker in tickers:
         # v2.20: Treat CASH$ as base-currency cash (GBP) with constant £1 valuation; no Yahoo fetch.
-        if ticker == "CASH$":
+        if ticker in ("CASH$", "$$CASH.L", "CASH"):
             continue
         try:
             # Get Yahoo Finance metadata
@@ -590,6 +590,7 @@ def get_price_history(
 ) -> pd.DataFrame:
     """Fetch prices and apply conversion factors to rebase to pounds, with Yahoo issues logging (v2.11)."""
     cash_symbol = "CASH$"
+    tickers = ["CASH$" if t in ("CASH", "$$CASH.L") else t for t in tickers]
 
     all_symbols = list(set(tickers) | {benchmark})
     download_symbols = [s for s in all_symbols if s != cash_symbol]
@@ -611,12 +612,11 @@ def get_price_history(
         close[cash_symbol] = 1.0
 
     for s in all_symbols:
-        if s not in close.columns:
-            # Ticker {s} is not a valid Yahoo ticker, a value of £1 has been assigned for the entire period.
+        if (s not in close.columns) or close[s].isna().all():
             close[s] = 1.0
             issues.append({
                 "symbol": s,
-                "problem": f"Ticker {s} is not a valid Yahoo ticker, a value of £1 has been assigned for the entire period.",
+                "problem": f"Ticker {s} is not a valid Yahoo ticker (or has no usable Yahoo history), so £1 has been assigned for the entire period.",
             })
 
     close = close[all_symbols]
@@ -634,7 +634,6 @@ def get_price_history(
             close[benchmark] = close[benchmark] / factor
 
     # v2.10: handle price gaps
-    close = close.dropna(how="all")
     close = close.sort_index()
 
     # v2.12: detect leading periods with missing prices per symbol
